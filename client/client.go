@@ -7,7 +7,6 @@ import (
 	"io"
 	"net"
 	"os"
-	"sync"
 	"time"
 )
 
@@ -23,15 +22,16 @@ func RunClient(addr string, duration time.Duration) {
 
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
-	wg := sync.WaitGroup{}
-	wg.Add(1)
-	go RunSendingWorker(conn, ctx, &wg)
-	go RunReceivingWorker(conn, ctx, &wg)
-	wg.Wait()
-	cancel()
+	go RunSendingWorker(conn, ctx, cancel)
+	go RunReceivingWorker(conn, ctx, cancel)
+
+	select {
+	case <-ctx.Done():
+		println("======== BYE ========")
+	}
 }
 
-func FromReaderToWriter(reader *bufio.Reader, writer *bufio.Writer, ctx context.Context, wg *sync.WaitGroup, workerType string) {
+func FromReaderToWriter(reader *bufio.Reader, writer *bufio.Writer, ctx context.Context, cancel context.CancelFunc, workerType string) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -42,32 +42,32 @@ func FromReaderToWriter(reader *bufio.Reader, writer *bufio.Writer, ctx context.
 			input, err := reader.ReadString('\n')
 			if err == io.EOF {
 				fmt.Printf("Connection closed by %v \n", workerType)
-				wg.Done()
+				cancel()
 				return
 			}
 			_, err = writer.WriteString(input)
 			if err != nil {
-				wg.Done()
+				cancel()
 				return
 			}
 
 			err = writer.Flush()
 			if err != nil {
-				wg.Done()
+				cancel()
 				return
 			}
 		}
 	}
 }
 
-func RunReceivingWorker(conn net.Conn, ctx context.Context, wg *sync.WaitGroup) {
+func RunReceivingWorker(conn net.Conn, ctx context.Context, cancel context.CancelFunc) {
 	reader := bufio.NewReader(conn)
 	writer := bufio.NewWriter(os.Stdout)
-	FromReaderToWriter(reader, writer, ctx, wg, HOST)
+	FromReaderToWriter(reader, writer, ctx, cancel, HOST)
 }
 
-func RunSendingWorker(conn net.Conn, ctx context.Context, wg *sync.WaitGroup) {
+func RunSendingWorker(conn net.Conn, ctx context.Context, cancel context.CancelFunc) {
 	reader := bufio.NewReader(os.Stdin)
 	writer := bufio.NewWriter(conn)
-	FromReaderToWriter(reader, writer, ctx, wg, CLIENT)
+	FromReaderToWriter(reader, writer, ctx, cancel, CLIENT)
 }

@@ -23,5 +23,4 @@ func main() {
 	}
 
 	client.RunClient(fmt.Sprintf("%v:%v", ip, port), duration)
-	time.Sleep(time.Second)
 }
